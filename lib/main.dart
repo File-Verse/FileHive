@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Server test
+
+
   runApp(const MyApp());
 }
 
@@ -104,7 +109,7 @@ class _MyHomePageState extends State<MyHomePage> {
           // wireframe for each widget.
           mainAxisAlignment: .center,
           children: [
-            const Text('You have pushed the button this many times:'),
+            const Text('hello manku:'),
             Text(
               '$_counter',
               style: Theme.of(context).textTheme.headlineMedium,
