@@ -35,6 +35,8 @@ dependencies:
   go_router: ^17.2.1
   dio: ^5.0.0
   shelf: ^1.4.0
+  shelf_router: ^1.1.0      # ← Yeh add karo
+  shelf_web_socket: ^3.0.0
   multicast_dns: ^0.3.2
   network_info_plus: ^7.0.0
   connectivity_plus: ^7.1.1
