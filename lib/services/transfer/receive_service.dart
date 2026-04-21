@@ -4,9 +4,8 @@ import 'file_save_service.dart';
 
 class ReceiveService {
   ServerSocket? _server;
-  final FileSaveService _fileSaveService = FileSaveService();
 
-  /// Start server
+  /// 🚀 Start server
   Future<void> startServer(int port) async {
     try {
       _server = await ServerSocket.bind(
@@ -26,7 +25,7 @@ class ReceiveService {
     }
   }
 
-  /// Handle client
+  /// 🔥 Handle client (FIXED VERSION)
   void _handleClient(Socket client) async {
     List<int> buffer = [];
 
@@ -35,6 +34,7 @@ class ReceiveService {
 
     String? fileName;
     int? fileSize;
+
     int receivedBytes = 0;
     bool metaReceived = false;
 
@@ -42,64 +42,76 @@ class ReceiveService {
       await for (var data in client) {
         buffer.addAll(data);
 
-        /// STEP 1: Read metadata
-        if (!metaReceived && buffer.contains(10)) {
-          int index = buffer.indexOf(10);
+        /// 📌 STEP 1: METADATA READ
+        while (!metaReceived) {
+          int newlineIndex = buffer.indexOf(10);
 
-          String metaString =
-          utf8.decode(buffer.sublist(0, index));
-          Map meta = jsonDecode(metaString);
+          if (newlineIndex == -1) break;
 
-          fileName = meta["fileName"];
-          fileSize = meta["fileSize"];
+          try {
+            String metaString =
+            utf8.decode(buffer.sublist(0, newlineIndex));
 
-          /// ✅ NULL CHECK (important fix)
-          if (fileName == null || fileSize == null) {
-            throw Exception("Invalid metadata");
+            final meta = jsonDecode(metaString);
+
+            fileName = meta["fileName"];
+            fileSize = meta["fileSize"];
+
+            if (fileName == null || fileSize == null) {
+              throw Exception("Invalid metadata");
+            }
+
+            print("📥 Receiving: $fileName ($fileSize bytes)");
+
+            /// 🔥 FIXED HERE
+            String path =
+            await FileSaveService.getUniqueFilePath(fileName);
+
+            file = File(path);
+            fileSink = file.openWrite();
+
+            buffer = buffer.sublist(newlineIndex + 1);
+            metaReceived = true;
+          } catch (e) {
+            print("❌ Metadata parse error: $e");
+            client.destroy();
+            return;
           }
-
-          print("📥 Receiving: $fileName ($fileSize bytes)");
-
-          /// 🔥 FileSaveService use
-          String path =
-          await _fileSaveService.getUniqueFilePath(fileName);
-
-          file = File(path);
-          fileSink = file.openWrite();
-
-          /// Remove metadata from buffer
-          buffer = buffer.sublist(index + 1);
-          metaReceived = true;
         }
 
-        /// STEP 2: Write file chunks
-        if (metaReceived && fileSink != null) {
-          fileSink.add(buffer);
-          receivedBytes += buffer.length;
+        /// 📌 STEP 2: WRITE FILE
+        if (metaReceived && fileSink != null && buffer.isNotEmpty) {
+          int remaining = fileSize! - receivedBytes;
+
+          List<int> writeData =
+          buffer.length > remaining ? buffer.sublist(0, remaining) : buffer;
+
+          fileSink.add(writeData);
+          receivedBytes += writeData.length;
 
           print("📊 Progress: $receivedBytes / $fileSize");
 
-          buffer.clear();
+          buffer = buffer.sublist(writeData.length);
 
-          /// STEP 3: Complete file
-          if (receivedBytes >= fileSize!) {
+          /// 📌 STEP 3: COMPLETE
+          if (receivedBytes >= fileSize) {
             await fileSink.flush();
             await fileSink.close();
 
-            print("✅ File saved: ${file!.path}");
+            print("✅ File saved: ${file?.path}");
 
-            client.close();
-            break;
+            client.destroy();
+            return;
           }
         }
       }
     } catch (e) {
       print("❌ Receive error: $e");
-      client.close();
+      client.destroy();
     }
   }
 
-  /// Stop server
+  /// 🛑 Stop server
   void stopServer() {
     _server?.close();
     print("🛑 Server stopped");

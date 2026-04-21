@@ -3,30 +3,30 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 
 class FileSaveService {
-  // FileHive folder name
   static const String _folderName = 'FileHive';
 
-  /// Returns the save directory path
-  /// Android: /storage/emulated/0/Download/FileHive/
-  /// iOS/Desktop: App Documents/FileHive/
+  // ───────────────────────────────────────────────
+  // 📁 GET SAVE DIRECTORY
+  // ───────────────────────────────────────────────
   static Future<Directory> _getSaveDirectory() async {
     Directory baseDir;
 
     if (Platform.isAndroid) {
-      // Android pe Downloads folder use karo
-      baseDir = Directory('/storage/emulated/0/Download/$_folderName');
+      final dir = await getExternalStorageDirectory();
+
+      if (dir == null) {
+        throw FileSaveException("Storage access failed");
+      }
+
+      baseDir = Directory('${dir.path}/$_folderName');
     } else if (Platform.isIOS) {
-      final docDir = await getApplicationDocumentsDirectory();
-      baseDir = Directory('${docDir.path}/$_folderName');
-    } else if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
-      final docDir = await getDownloadsDirectory();
-      baseDir = Directory('${docDir!.path}/$_folderName');
+      final dir = await getApplicationDocumentsDirectory();
+      baseDir = Directory('${dir.path}/$_folderName');
     } else {
-      final docDir = await getApplicationDocumentsDirectory();
-      baseDir = Directory('${docDir.path}/$_folderName');
+      final dir = await getDownloadsDirectory();
+      baseDir = Directory('${dir!.path}/$_folderName');
     }
 
-    // Folder exist nahi karta toh create karo
     if (!await baseDir.exists()) {
       await baseDir.create(recursive: true);
     }
@@ -34,102 +34,131 @@ class FileSaveService {
     return baseDir;
   }
 
-  /// Main function — file bytes ko disk pe save karta hai
-  /// Returns: saved file ka full path
+  // ───────────────────────────────────────────────
+  // 🔥 UNIQUE FILE PATH (NEW - IMPORTANT)
+  // ───────────────────────────────────────────────
+  static Future<String> getUniqueFilePath(String fileName) async {
+    final dir = await _getSaveDirectory();
+
+    final safeName = _sanitizeFileName(fileName);
+    final uniqueName = await _resolveFileName(dir, safeName);
+
+    return '${dir.path}/$uniqueName';
+  }
+
+  // ───────────────────────────────────────────────
+  // 💾 SAVE FILE (SMALL FILES)
+  // ───────────────────────────────────────────────
   static Future<String> saveFile({
     required String fileName,
     required Uint8List bytes,
   }) async {
     try {
-      final saveDir = await _getSaveDirectory();
+      final path = await getUniqueFilePath(fileName);
 
-      // Duplicate file name conflict handle karo
-      final uniqueFileName = await _resolveFileName(saveDir, fileName);
-      final filePath = '${saveDir.path}/$uniqueFileName';
+      final file = File(path);
+      await file.writeAsBytes(bytes, flush: true);
 
-      final file = File(filePath);
-      await file.writeAsBytes(bytes);
-
-      return filePath;
+      return path;
     } catch (e) {
-      throw FileSaveException('File save karne mein error aaya: $e');
+      throw FileSaveException('Save error: $e');
     }
   }
 
-  /// Agar same naam ki file already exist karti hai
-  /// toh timestamp suffix add karo — e.g. photo_1714000000.jpg
+  // ───────────────────────────────────────────────
+  // 🚀 STREAM SAVE (LARGE FILES)
+  // ───────────────────────────────────────────────
+  static Future<IOSink> openFileSink(String fileName) async {
+    final path = await getUniqueFilePath(fileName);
+    final file = File(path);
+
+    return file.openWrite();
+  }
+
+  // ───────────────────────────────────────────────
+  // 🧹 CLEAN FILE NAME
+  // ───────────────────────────────────────────────
+  static String _sanitizeFileName(String name) {
+    return name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  }
+
+  // ───────────────────────────────────────────────
+  // 🔁 DUPLICATE HANDLE
+  // ───────────────────────────────────────────────
   static Future<String> _resolveFileName(
       Directory dir,
       String fileName,
       ) async {
-    final file = File('${dir.path}/$fileName');
+    String name = fileName;
+    int count = 1;
 
-    if (!await file.exists()) {
-      return fileName; // No conflict — same name use karo
+    while (await File('${dir.path}/$name').exists()) {
+      final dot = fileName.lastIndexOf('.');
+
+      String base =
+      dot != -1 ? fileName.substring(0, dot) : fileName;
+      String ext = dot != -1 ? fileName.substring(dot) : '';
+
+      name = '${base}_$count$ext';
+      count++;
     }
 
-    // Name aur extension alag karo
-    final dotIndex = fileName.lastIndexOf('.');
-    final String name;
-    final String ext;
-
-    if (dotIndex != -1) {
-      name = fileName.substring(0, dotIndex);
-      ext = fileName.substring(dotIndex); // e.g. ".jpg"
-    } else {
-      name = fileName;
-      ext = '';
-    }
-
-    // Timestamp suffix add karo
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    return '${name}_$timestamp$ext';
+    return name;
   }
 
-  /// Saved files ki list return karta hai
-  static Future<List<FileSystemEntity>> getSavedFiles() async {
+  // ───────────────────────────────────────────────
+  // 📂 LIST FILES
+  // ───────────────────────────────────────────────
+  static Future<List<File>> getSavedFiles() async {
     try {
-      final saveDir = await _getSaveDirectory();
-      if (!await saveDir.exists()) return [];
+      final dir = await _getSaveDirectory();
+      if (!await dir.exists()) return [];
 
-      return saveDir.listSync().toList()
-        ..sort((a, b) {
-          final aStat = a.statSync();
-          final bStat = b.statSync();
-          return bStat.modified.compareTo(aStat.modified); // Latest first
-        });
-    } catch (e) {
+      final files = dir.listSync().whereType<File>().toList();
+
+      files.sort((a, b) =>
+          b.statSync().modified.compareTo(a.statSync().modified));
+
+      return files;
+    } catch (_) {
       return [];
     }
   }
 
-  /// Ek specific file delete karo
-  static Future<bool> deleteFile(String filePath) async {
+  // ───────────────────────────────────────────────
+  // ❌ DELETE FILE
+  // ───────────────────────────────────────────────
+  static Future<bool> deleteFile(String path) async {
     try {
-      final file = File(filePath);
+      final file = File(path);
       if (await file.exists()) {
         await file.delete();
         return true;
       }
       return false;
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
 
-  /// Available storage check karo (bytes mein)
-  static Future<int> getAvailableStorage() async {
+  // ───────────────────────────────────────────────
+  // 📊 STORAGE CHECK
+  // ───────────────────────────────────────────────
+  static Future<int> getFreeSpace() async {
     try {
-      final saveDir = await _getSaveDirectory();
-      final stat = await saveDir.stat();
-      return stat.size;
-    } catch (e) {
+      final dir = await _getSaveDirectory();
+      final stat = await dir.stat();
+
+      return stat.size; // approx only
+    } catch (_) {
       return 0;
     }
   }
 }
 
-/// Custom Exception class
+// ───────────────────────────────────────────────
+// ❗ CUSTOM EXCEPTION
+// ───────────────────────────────────────────────
 class FileSaveException implements Exception {
   final String message;
   FileSaveException(this.message);

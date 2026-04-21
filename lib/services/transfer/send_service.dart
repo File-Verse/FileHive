@@ -2,105 +2,138 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:crypto/crypto.dart';
-import 'dart:convert';
 import 'package:path/path.dart' as p;
 
 import 'package:filehive/services/network/network_info_service.dart';
+import 'package:filehive/services/network/mdns_service.dart';
 
 class SendService {
-  final Dio _dio = Dio();
+  final Dio _dio = Dio(
+    BaseOptions(
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 30),
+      sendTimeout: const Duration(seconds: 30),
+    ),
+  );
+
   final NetworkInfoService _networkInfoService = NetworkInfoService();
+  final MdnsService _mdnsService = MdnsService();
 
-  static const int CHUNK_SIZE = 1024 * 1024; // 1MB
+  static const int chunkSize = 1024 * 1024; // 1MB
 
-  // ─────────────────────────────────────────────────
-  // 🔥 1. PICK + SEND (NEW INTEGRATED METHOD)
-  // ─────────────────────────────────────────────────
+  // ───────────────────────────────────────────────
+  // 🔥 AUTO PICK + AUTO SEND
+  // ───────────────────────────────────────────────
   Future<void> pickAndSendFile({
-    required String receiverIP,
     required String token,
     required Function(double progress) onProgress,
     required Function(String error) onError,
   }) async {
-    File? file = await pickFile();
+    try {
+      // 🔥 STEP 1: DISCOVER DEVICE
+      final device = await _getReceiverDevice();
 
-    if (file == null) {
-      onError("No file selected");
-      return;
+      if (device == null) {
+        onError("❌ No receiver found");
+        return;
+      }
+
+      print("📡 Found: ${device.ip}:${device.port}");
+
+      // 🔥 STEP 2: PICK FILE
+      final file = await pickFile();
+
+      if (file == null) {
+        onError("No file selected");
+        return;
+      }
+
+      // 🔥 STEP 3: SEND
+      await uploadToReceiver(
+        file: file,
+        receiverIP: device.ip,
+        port: device.port,
+        token: token,
+        onProgress: onProgress,
+        onError: onError,
+      );
+    } catch (e) {
+      onError("❌ pickAndSend error: $e");
     }
-
-    await uploadToReceiver(
-      file: file,
-      receiverIP: receiverIP,
-      token: token,
-      onProgress: onProgress,
-      onError: onError,
-    );
   }
 
-  // ─────────────────────────────────────────────────
-  // 2. FILE PICK KARO
-  // ─────────────────────────────────────────────────
+  // ───────────────────────────────────────────────
+  // 📂 FILE PICK
+  // ───────────────────────────────────────────────
   Future<File?> pickFile() async {
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.platform.pickFiles(
         allowMultiple: false,
         type: FileType.any,
       );
 
-      if (result == null) return null;
+      if (result == null || result.files.single.path == null) {
+        return null;
+      }
 
-      String? path = result.files.single.path;
-      if (path == null) return null;
-
-      return File(path);
+      return File(result.files.single.path!);
     } catch (e) {
-      print('pickFile error: $e');
+      print('❌ pickFile error: $e');
       return null;
     }
   }
 
-  // ─────────────────────────────────────────────────
-  // 3. MULTIPLE FILES PICK KARO
-  // ─────────────────────────────────────────────────
-  Future<List<File>> pickMultipleFiles() async {
+  // ───────────────────────────────────────────────
+  // 🌐 DEVICE DISCOVERY (mDNS + fallback)
+  // ───────────────────────────────────────────────
+  Future<DiscoveredDevice?> _getReceiverDevice() async {
+    await _mdnsService.start();
+
     try {
-      FilePickerResult? result = await FilePicker.platform.pickFiles(
-        allowMultiple: true,
-        type: FileType.any,
-      );
+      final devices = await _mdnsService.scanDevices();
 
-      if (result == null) return [];
+      if (devices.isNotEmpty) {
+        return devices.first; // 🔥 best case
+      }
 
-      return result.files
-          .where((f) => f.path != null)
-          .map((f) => File(f.path!))
-          .toList();
+      // ⚠️ FALLBACK (same WiFi IP guess)
+      final myIP = await _networkInfoService.getWifiIP();
+
+      if (myIP != null) {
+        final base = myIP.substring(0, myIP.lastIndexOf('.'));
+        final guessIP = "$base.1"; // router ya common device
+
+        print("⚠️ Fallback IP try: $guessIP");
+
+        return DiscoveredDevice(
+          name: "Fallback",
+          ip: guessIP,
+          port: 8080,
+        );
+      }
+
+      return null;
     } catch (e) {
-      print('pickMultipleFiles error: $e');
-      return [];
+      print("❌ Discovery error: $e");
+      return null;
+    } finally {
+      await _mdnsService.stop();
     }
   }
 
-  // ─────────────────────────────────────────────────
-  // 4. SENDER IP
-  // ─────────────────────────────────────────────────
-  Future<String?> getSenderIP() async {
-    return await _networkInfoService.getWifiIP();
-  }
-
-  // ─────────────────────────────────────────────────
-  // 5. CHECKSUM
-  // ─────────────────────────────────────────────────
+  // ───────────────────────────────────────────────
+  // 🔐 CHECKSUM
+  // ───────────────────────────────────────────────
   String _getChecksum(List<int> bytes) {
     return md5.convert(bytes).toString();
   }
 
-  // ─────────────────────────────────────────────────
-  // 6. SINGLE CHUNK SEND
-  // ─────────────────────────────────────────────────
+  // ───────────────────────────────────────────────
+  // 🚀 SEND CHUNK
+  // ───────────────────────────────────────────────
   Future<bool> _sendChunk({
     required String receiverIP,
+    required int port,
     required String token,
     required String filename,
     required int chunkIndex,
@@ -109,11 +142,11 @@ class SendService {
     required List<int> chunkData,
   }) async {
     try {
-      String checksum = _getChecksum(chunkData);
+      final checksum = _getChecksum(chunkData);
 
       await _dio.post(
-        'http://$receiverIP:8080/upload',
-        data: Stream.fromIterable([chunkData]),
+        'http://$receiverIP:$port/upload',
+        data: chunkData,
         options: Options(
           headers: {
             'X-Filename': filename,
@@ -123,48 +156,50 @@ class SendService {
             'X-Checksum': checksum,
             'X-Token': token,
             'Content-Type': 'application/octet-stream',
-            'Content-Length': chunkData.length.toString(),
           },
         ),
       );
 
       return true;
     } catch (e) {
-      print('_sendChunk error (chunk $chunkIndex): $e');
+      print("❌ Chunk $chunkIndex failed: $e");
       return false;
     }
   }
 
-  // ─────────────────────────────────────────────────
-  // 7. MAIN UPLOAD METHOD
-  // ─────────────────────────────────────────────────
+  // ───────────────────────────────────────────────
+  // 📤 UPLOAD FILE
+  // ───────────────────────────────────────────────
   Future<bool> uploadToReceiver({
     required File file,
     required String receiverIP,
+    required int port,
     required String token,
     required Function(double progress) onProgress,
     required Function(String error) onError,
   }) async {
-    try {
-      int fileSize = await file.length();
-      String filename = p.basename(file.path);
-      int totalChunks = (fileSize / CHUNK_SIZE).ceil();
+    RandomAccessFile? raf;
 
-      RandomAccessFile raf = await file.open(mode: FileMode.read);
+    try {
+      final fileSize = await file.length();
+      final filename = p.basename(file.path);
+      final totalChunks = (fileSize / chunkSize).ceil();
+
+      raf = await file.open(mode: FileMode.read);
 
       for (int i = 0; i < totalChunks; i++) {
-        int start = i * CHUNK_SIZE;
-        int bytesToRead = (start + CHUNK_SIZE > fileSize)
-            ? fileSize - start
-            : CHUNK_SIZE;
+        int remaining = fileSize - (i * chunkSize);
+        int bytesToRead =
+        remaining > chunkSize ? chunkSize : remaining;
 
-        List<int> chunkData = await raf.read(bytesToRead);
+        final chunkData = await raf.read(bytesToRead);
 
-        bool sent = false;
+        bool success = false;
 
         for (int attempt = 0; attempt < 3; attempt++) {
-          sent = await _sendChunk(
+          success = await _sendChunk(
             receiverIP: receiverIP,
+            port: port,
             token: token,
             filename: filename,
             chunkIndex: i,
@@ -173,49 +208,28 @@ class SendService {
             chunkData: chunkData,
           );
 
-          if (sent) break;
+          if (success) break;
+
           await Future.delayed(const Duration(seconds: 1));
         }
 
-        if (!sent) {
+        if (!success) {
           await raf.close();
-          onError('Chunk $i send nahi hua');
+          onError("❌ Chunk $i failed");
           return false;
         }
 
-        double progress = (i + 1) / totalChunks;
-        onProgress(progress);
+        onProgress((i + 1) / totalChunks);
       }
 
       await raf.close();
+      print("✅ File sent");
+
       return true;
     } catch (e) {
-      onError('uploadToReceiver error: $e');
+      onError("❌ Upload error: $e");
+      await raf?.close();
       return false;
-    }
-  }
-
-  // ─────────────────────────────────────────────────
-  // 8. MULTIPLE FILE UPLOAD
-  // ─────────────────────────────────────────────────
-  Future<void> uploadMultipleFiles({
-    required List<File> files,
-    required String receiverIP,
-    required String token,
-    required Function(int fileIndex, double progress) onProgress,
-    required Function(int fileIndex) onFileComplete,
-    required Function(String error) onError,
-  }) async {
-    for (int i = 0; i < files.length; i++) {
-      bool success = await uploadToReceiver(
-        file: files[i],
-        receiverIP: receiverIP,
-        token: token,
-        onProgress: (progress) => onProgress(i, progress),
-        onError: onError,
-      );
-
-      if (success) onFileComplete(i);
     }
   }
 }
