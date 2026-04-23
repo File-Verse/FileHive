@@ -1,20 +1,17 @@
 import 'dart:io';
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
-import 'server_routes.dart'; // ✅ UploadHandler hata diya, ServerRoutes add kiya
+import 'routes.dart'; // ✅ Fix: server_routes.dart → routes.dart
 
 class LocalServerService {
   HttpServer? _server;
   static const int serverPort = 8080;
 
   // ─── Server Start ─────────────────────────────────────────────────────────
-
   Future<void> startServer({
     required String deviceName,
     required String deviceIp,
   }) async {
-
-    // ✅ ServerRoutes ko device info pass karo
     final routes = ServerRoutes(
       deviceName: deviceName,
       deviceIp: deviceIp,
@@ -23,7 +20,7 @@ class LocalServerService {
 
     final handler = Pipeline()
         .addMiddleware(logRequests())
-        .addMiddleware(_errorMiddleware()) // ✅ Global error catching
+        .addMiddleware(_errorMiddleware())
         .addHandler(routes.handler);
 
     _server = await shelf_io.serve(handler, '0.0.0.0', serverPort);
@@ -31,7 +28,6 @@ class LocalServerService {
   }
 
   // ─── Server Stop ──────────────────────────────────────────────────────────
-
   Future<void> stopServer() async {
     await _server?.close(force: true);
     _server = null;
@@ -39,11 +35,9 @@ class LocalServerService {
   }
 
   // ─── Status ───────────────────────────────────────────────────────────────
-
   bool get isRunning => _server != null;
 
   // ─── Global Error Middleware ──────────────────────────────────────────────
-
   Middleware _errorMiddleware() {
     return (Handler innerHandler) {
       return (Request request) async {
