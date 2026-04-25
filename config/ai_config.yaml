@@ -1,0 +1,72 @@
+# AI Testing Framework Configuration
+# FileHive Flutter Application
+
+# ---------------------------------------------------------------------------
+# Active provider: "openai" | "claude" | "auto"
+# "auto" tries OpenAI first and falls back to Claude if unavailable.
+# ---------------------------------------------------------------------------
+active_provider: auto
+
+# ---------------------------------------------------------------------------
+# OpenAI configuration
+# ---------------------------------------------------------------------------
+openai:
+  model: gpt-4
+  max_tokens: 2048
+  temperature: 0.3
+  timeout_seconds: 60
+  max_retries: 3
+  retry_delay_seconds: 2
+
+# ---------------------------------------------------------------------------
+# Claude (Anthropic) configuration
+# ---------------------------------------------------------------------------
+claude:
+  model: claude-3-5-sonnet-20241022
+  max_tokens: 2048
+  temperature: 0.3
+  timeout_seconds: 60
+  max_retries: 3
+  retry_delay_seconds: 2
+
+# ---------------------------------------------------------------------------
+# Test generation settings
+# ---------------------------------------------------------------------------
+test_generation:
+  max_tests_per_file: 10
+  include_categories:
+    - unit
+    - widget
+    - integration
+  include_accessibility_tests: true
+  output_directory: test/ai_generated
+
+# ---------------------------------------------------------------------------
+# Bug detection settings
+# ---------------------------------------------------------------------------
+bug_detection:
+  minimum_severity: low        # critical | high | medium | low | info
+  fail_on_critical: true
+  fail_on_high: false
+  scan_directories:
+    - lib/
+
+# ---------------------------------------------------------------------------
+# Report generation settings
+# ---------------------------------------------------------------------------
+reporting:
+  output_directory: build/ai_test_reports
+  formats:
+    - json
+    - html
+  include_generated_tests: true
+  include_bug_report: true
+  include_analysis_summary: true
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging:
+  level: info    # debug | info | warning | error
+  log_to_file: false
+  log_file: build/ai_test_reports/ai_testing.log
