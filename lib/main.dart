@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'services/network/device_network_service.dart';
 
 void main() {
   runApp(MyApp());
@@ -21,18 +22,24 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static const int _serverPort = 8080;
+  static const Duration _connectionTimeout = Duration(seconds: 5);
+
   ServerSocket? server;
   Socket? socket;
   List<String> messages = [];
   TextEditingController controller = TextEditingController();
 
+  final DeviceNetworkService _networkService = DeviceNetworkService();
+
   // 🔹 START SERVER
   void startServer() async {
     try {
-      server = await ServerSocket.bind(InternetAddress.anyIPv4, 3000);
+      server = await ServerSocket.bind(InternetAddress.anyIPv4, _serverPort);
 
+      final deviceIp = await _networkService.getLocalIp();
       setState(() {
-        messages.add("Server started");
+        messages.add("Server started on $deviceIp:$_serverPort");
       });
 
       server!.listen((client) {
@@ -47,31 +54,39 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (e) {
       setState(() {
-        messages.add("Server Error");
+        messages.add("Server Error: $e");
       });
     }
   }
 
   // 🔹 CONNECT TO SERVER
   void connectToServer() async {
-    try {
-      socket = await Socket.connect("10.66.212.46", 3000)
-          .timeout(Duration(seconds: 5));
+    final deviceIp = await _networkService.getLocalIp();
 
-      setState(() {
-        messages.add("Connected to server");
-      });
+    // Try device LAN IP first, then fall back to localhost.
+    final candidates = [deviceIp, '127.0.0.1'];
 
-      socket!.listen((data) {
-        String msg = utf8.decode(data);
+    for (final host in candidates) {
+      try {
+        socket = await Socket.connect(host, _serverPort)
+            .timeout(_connectionTimeout);
+
         setState(() {
-          messages.add("Server: $msg");
+          messages.add("Connected to server at $host:$_serverPort");
         });
-      });
-    } catch (e) {
-      setState(() {
-        messages.add("Connection Failed");
-      });
+
+        socket!.listen((data) {
+          String msg = utf8.decode(data);
+          setState(() {
+            messages.add("Server: $msg");
+          });
+        });
+        return;
+      } catch (e) {
+        setState(() {
+          messages.add("Connection Failed ($host:$_serverPort): $e");
+        });
+      }
     }
   }
 
