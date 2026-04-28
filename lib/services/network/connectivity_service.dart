@@ -4,8 +4,8 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 enum AppConnectionType {
   none,
   wifi,
-  mobile,
   ethernet,
+  mobile,
   vpn,
   bluetooth,
   satellite,
@@ -17,61 +17,74 @@ class ConnectivityService {
 
   StreamSubscription<List<ConnectivityResult>>? _subscription;
 
-  /// Current active connection types laata hai
+  /// Current active connection list
   Future<List<ConnectivityResult>> getActiveConnections() async {
     try {
-      final result = await _connectivity.checkConnectivity();
-      return result;
+      final results = await _connectivity.checkConnectivity();
+
+      if (results.isEmpty) {
+        return [ConnectivityResult.none];
+      }
+
+      return results;
     } catch (e) {
-      print('getActiveConnections error: $e');
+      print('❌ getActiveConnections error: $e');
       return [ConnectivityResult.none];
     }
   }
 
-  /// App-friendly single primary connection type
+  /// Primary connection type for app logic
   Future<AppConnectionType> getPrimaryConnectionType() async {
     final results = await getActiveConnections();
     return _mapToPrimaryType(results);
   }
 
-  /// Kya kisi bhi type ka network available hai?
+  /// Any network connected or not
   Future<bool> isConnected() async {
     final results = await getActiveConnections();
     return !_containsOnlyNone(results);
   }
 
-  /// Sirf Wi-Fi available hai ya nahi
+  /// FileHive ke liye important:
+  /// WiFi / Hotspot / Ethernet par hi local transfer possible hai
+  Future<bool> canUseLocalNetwork() async {
+    final results = await getActiveConnections();
+
+    return results.contains(ConnectivityResult.wifi) ||
+        results.contains(ConnectivityResult.ethernet);
+  }
+
   Future<bool> isWifiConnected() async {
     final results = await getActiveConnections();
     return results.contains(ConnectivityResult.wifi);
   }
 
-  /// Mobile data available hai ya nahi
-  Future<bool> isMobileConnected() async {
-    final results = await getActiveConnections();
-    return results.contains(ConnectivityResult.mobile);
-  }
-
-  /// Ethernet available hai ya nahi
   Future<bool> isEthernetConnected() async {
     final results = await getActiveConnections();
     return results.contains(ConnectivityResult.ethernet);
   }
 
-  /// Connectivity changes stream
+  Future<bool> isMobileConnected() async {
+    final results = await getActiveConnections();
+    return results.contains(ConnectivityResult.mobile);
+  }
+
+  /// App-friendly stream
   Stream<AppConnectionType> get connectionStream async* {
     yield await getPrimaryConnectionType();
 
     yield* _connectivity.onConnectivityChanged.map(_mapToPrimaryType);
   }
 
-  /// Raw stream bhi useful hoti hai debugging ya advanced logic ke liye
+  /// Raw connectivity stream
   Stream<List<ConnectivityResult>> get rawConnectionStream {
     return _connectivity.onConnectivityChanged;
   }
 
-  /// Listener start karne ke liye helper
-  void startListening(void Function(AppConnectionType type) onChanged) {
+  /// Start listener
+  void startListening({
+    required void Function(AppConnectionType type) onChanged,
+  }) {
     stopListening();
 
     _subscription = _connectivity.onConnectivityChanged.listen(
@@ -80,32 +93,31 @@ class ConnectivityService {
         onChanged(type);
       },
       onError: (e) {
-        print('Connectivity listener error: $e');
+        print('❌ Connectivity listener error: $e');
         onChanged(AppConnectionType.none);
       },
     );
   }
 
-  /// Listener stop
+  /// Stop listener
   void stopListening() {
     _subscription?.cancel();
     _subscription = null;
   }
 
-  /// Dispose call kar dena provider/controller ke dispose me
   void dispose() {
     stopListening();
   }
 
-  /// Human-readable text
+  /// Human readable text
   String connectionTypeToText(AppConnectionType type) {
     switch (type) {
       case AppConnectionType.wifi:
         return 'Wi-Fi';
-      case AppConnectionType.mobile:
-        return 'Mobile Data';
       case AppConnectionType.ethernet:
         return 'Ethernet';
+      case AppConnectionType.mobile:
+        return 'Mobile Data';
       case AppConnectionType.vpn:
         return 'VPN';
       case AppConnectionType.bluetooth:
@@ -119,27 +131,37 @@ class ConnectivityService {
     }
   }
 
+  /// FileHive priority:
+  /// WiFi > Ethernet > Mobile > VPN > Bluetooth > Satellite > Other
   AppConnectionType _mapToPrimaryType(List<ConnectivityResult> results) {
-    if (_containsOnlyNone(results)) return AppConnectionType.none;
+    if (_containsOnlyNone(results)) {
+      return AppConnectionType.none;
+    }
 
     if (results.contains(ConnectivityResult.wifi)) {
       return AppConnectionType.wifi;
     }
-    if (results.contains(ConnectivityResult.mobile)) {
-      return AppConnectionType.mobile;
-    }
+
     if (results.contains(ConnectivityResult.ethernet)) {
       return AppConnectionType.ethernet;
     }
+
+    if (results.contains(ConnectivityResult.mobile)) {
+      return AppConnectionType.mobile;
+    }
+
     if (results.contains(ConnectivityResult.vpn)) {
       return AppConnectionType.vpn;
     }
+
     if (results.contains(ConnectivityResult.bluetooth)) {
       return AppConnectionType.bluetooth;
     }
+
     if (results.contains(ConnectivityResult.satellite)) {
       return AppConnectionType.satellite;
     }
+
     if (results.contains(ConnectivityResult.other)) {
       return AppConnectionType.other;
     }
@@ -149,6 +171,6 @@ class ConnectivityService {
 
   bool _containsOnlyNone(List<ConnectivityResult> results) {
     return results.isEmpty ||
-        (results.length == 1 && results.first == ConnectivityResult.none);
+        results.every((result) => result == ConnectivityResult.none);
   }
 }
