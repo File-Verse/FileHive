@@ -47,6 +47,7 @@ class ServerRoutes {
     return Response.ok(
       jsonEncode({
         'status': 'ok',
+        'app': 'FileHive',
         'name': deviceName,
         'ip': deviceIp,
         'port': port,
