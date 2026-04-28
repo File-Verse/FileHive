@@ -1,0 +1,118 @@
+name: AI Testing Framework
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'pubspec.yaml'
+      - 'config/ai_config.yaml'
+      - '.github/workflows/ai_testing.yml'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'lib/**'
+      - 'test/**'
+      - 'pubspec.yaml'
+  schedule:
+    # Run full AI analysis nightly at 02:00 UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'AI provider to use'
+        required: false
+        default: 'mock'
+        type: choice
+        options:
+          - mock
+          - openai
+          - claude
+          - auto
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Unit & integration tests (uses mock providers – no API keys required)
+  # ---------------------------------------------------------------------------
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyse code
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run unit tests
+        run: flutter test test/services/ --reporter=expanded
+
+      - name: Run AI integration tests (mock providers)
+        run: flutter test test/ai_integration/ --reporter=expanded
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/ai_test_reports/
+          retention-days: 30
+
+  # ---------------------------------------------------------------------------
+  # AI-powered analysis (requires API keys – runs on main or scheduled runs)
+  # ---------------------------------------------------------------------------
+  ai-analysis:
+    name: AI Analysis
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.provider != 'mock') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: test
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+      AI_PROVIDER: ${{ github.event.inputs.provider || 'auto' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run AI integration tests with live providers
+        run: flutter test test/ai_integration/ --reporter=expanded
+        continue-on-error: true
+
+      - name: Upload AI analysis reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-analysis-reports
+          path: build/ai_test_reports/
+          retention-days: 90
