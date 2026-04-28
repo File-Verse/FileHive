@@ -26,12 +26,17 @@ class SendService {
   // ───────────────────────────────────────────────
   Future<void> pickAndSendFile({
     required String token,
+    String? manualIP, // ✅ NEW
+    int manualPort = 8080, // ✅ NEW
     required Function(double progress) onProgress,
     required Function(String error) onError,
   }) async {
     try {
       // 🔥 STEP 1: DISCOVER DEVICE
-      final device = await _getReceiverDevice();
+      final device = await _getReceiverDevice(
+        manualIP: manualIP,
+        manualPort: manualPort,
+      );
 
       if (device == null) {
         onError("❌ No receiver found");
@@ -84,9 +89,12 @@ class SendService {
   }
 
   // ───────────────────────────────────────────────
-  // 🌐 DEVICE DISCOVERY (mDNS + fallback)
+  // 🌐 DEVICE DISCOVERY (mDNS + manual + fallback)
   // ───────────────────────────────────────────────
-  Future<DiscoveredDevice?> _getReceiverDevice() async {
+  Future<DiscoveredDevice?> _getReceiverDevice({
+    String? manualIP,
+    int manualPort = 8080,
+  }) async {
     await _mdnsService.start();
 
     try {
@@ -96,12 +104,30 @@ class SendService {
         return devices.first; // 🔥 best case
       }
 
+      // 🔥 MANUAL IP FALLBACK
+      if (manualIP != null && manualIP.trim().isNotEmpty) {
+        final ip = manualIP.trim();
+
+        if (!_isValidIP(ip)) {
+          print("❌ Invalid manual IP: $ip");
+          return null;
+        }
+
+        print("📌 Manual IP used: $ip:$manualPort");
+
+        return DiscoveredDevice(
+          name: "Manual",
+          ip: ip,
+          port: manualPort,
+        );
+      }
+
       // ⚠️ FALLBACK (same WiFi IP guess)
       final myIP = await _networkInfoService.getWifiIP();
 
       if (myIP != null) {
         final base = myIP.substring(0, myIP.lastIndexOf('.'));
-        final guessIP = "$base.1"; // router ya common device
+        final guessIP = "$base.1";
 
         print("⚠️ Fallback IP try: $guessIP");
 
@@ -119,6 +145,18 @@ class SendService {
     } finally {
       await _mdnsService.stop();
     }
+  }
+
+  // ───────────────────────────────────────────────
+  // 🔐 IP VALIDATION
+  // ───────────────────────────────────────────────
+  bool _isValidIP(String ip) {
+    final regex = RegExp(
+      r'^((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.){3}'
+      r'(25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])$',
+    );
+
+    return regex.hasMatch(ip);
   }
 
   // ───────────────────────────────────────────────
