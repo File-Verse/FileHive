@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:filehive/services/network/mdns_service.dart';
@@ -22,9 +23,6 @@ class SendService {
 
   static const int chunkSize = 1024 * 1024; // 1MB
 
-  // ───────────────────────────────────────────────
-  // AUTO PICK + AUTO SEND
-  // ───────────────────────────────────────────────
   Future<void> pickAndSendFile({
     required String token,
     String? manualIP,
@@ -43,7 +41,7 @@ class SendService {
         return;
       }
 
-      print('📡 Found receiver: ${device.ip}:${device.port}');
+      debugPrint('📡 Found receiver: ${device.ip}:${device.port}');
 
       final file = await pickFile();
 
@@ -65,9 +63,6 @@ class SendService {
     }
   }
 
-  // ───────────────────────────────────────────────
-  // FILE PICK
-  // ───────────────────────────────────────────────
   Future<File?> pickFile() async {
     try {
       final result = await FilePicker.platform.pickFiles(
@@ -81,36 +76,31 @@ class SendService {
 
       return File(result.files.single.path!);
     } catch (e) {
-      print('❌ pickFile error: $e');
+      debugPrint('❌ pickFile error: $e');
       return null;
     }
   }
 
-  // ───────────────────────────────────────────────
-  // DEVICE DISCOVERY: mDNS + Manual IP + Gateway fallback
-  // ───────────────────────────────────────────────
   Future<DiscoveredDevice?> _getReceiverDevice({
     String? manualIP,
     int manualPort = 8080,
   }) async {
     try {
-      // STEP 1: mDNS auto discovery
       final devices = await _mdnsService.scanDevices();
 
       if (devices.isNotEmpty) {
         return devices.first;
       }
 
-      // STEP 2: Manual IP fallback
       if (manualIP != null && manualIP.trim().isNotEmpty) {
         final ip = manualIP.trim();
 
         if (!_isValidIP(ip)) {
-          print('❌ Invalid manual IP: $ip');
+          debugPrint('❌ Invalid manual IP: $ip');
           return null;
         }
 
-        print('📌 Manual IP used: $ip:$manualPort');
+        debugPrint('📌 Manual IP used: $ip:$manualPort');
 
         return DiscoveredDevice(
           name: 'Manual',
@@ -119,12 +109,11 @@ class SendService {
         );
       }
 
-      // STEP 3: Gateway fallback
       final fallbackIP = await _networkInfoService.getGatewayIpAddress() ??
           await _networkInfoService.guessGatewayIpAddress();
 
       if (fallbackIP != null && fallbackIP.isNotEmpty) {
-        print('⚠️ Fallback IP try: $fallbackIP');
+        debugPrint('⚠️ Fallback IP try: $fallbackIP');
 
         return DiscoveredDevice(
           name: 'Fallback',
@@ -135,16 +124,13 @@ class SendService {
 
       return null;
     } catch (e) {
-      print('❌ Discovery error: $e');
+      debugPrint('❌ Discovery error: $e');
       return null;
     } finally {
       _mdnsService.stop();
     }
   }
 
-  // ───────────────────────────────────────────────
-  // IP VALIDATION
-  // ───────────────────────────────────────────────
   bool _isValidIP(String ip) {
     final regex = RegExp(
       r'^((25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\.){3}'
@@ -154,16 +140,10 @@ class SendService {
     return regex.hasMatch(ip);
   }
 
-  // ───────────────────────────────────────────────
-  // CHECKSUM
-  // ───────────────────────────────────────────────
   String _getChecksum(List<int> bytes) {
     return md5.convert(bytes).toString();
   }
 
-  // ───────────────────────────────────────────────
-  // SEND CHUNK
-  // ───────────────────────────────────────────────
   Future<bool> _sendChunk({
     required String receiverIP,
     required int port,
@@ -195,14 +175,11 @@ class SendService {
 
       return true;
     } catch (e) {
-      print('❌ Chunk $chunkIndex failed: $e');
+      debugPrint('❌ Chunk $chunkIndex failed: $e');
       return false;
     }
   }
 
-  // ───────────────────────────────────────────────
-  // UPLOAD FILE
-  // ───────────────────────────────────────────────
   Future<bool> uploadToReceiver({
     required File file,
     required String receiverIP,
@@ -253,7 +230,7 @@ class SendService {
         onProgress((i + 1) / totalChunks);
       }
 
-      print('✅ File sent successfully');
+      debugPrint('✅ File sent successfully');
       return true;
     } catch (e) {
       onError('❌ Upload error: $e');
