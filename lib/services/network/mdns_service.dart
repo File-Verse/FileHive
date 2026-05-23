@@ -19,6 +19,7 @@ class DiscoveredDevice {
 }
 
 class MdnsService {
+  // Must match MdnsBroadcastService.serviceType
   static const String serviceType = '_filehive._tcp';
 
   MDnsClient? _client;
