@@ -1,6 +1,4 @@
-<<<<<<< HEAD
-# FileHive
-=======
+
 # filehive
 
 A new Flutter project.

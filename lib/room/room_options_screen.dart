@@ -1,50 +1,114 @@
+import 'package:filehive/routes/app_routes.dart';
 import 'package:flutter/material.dart';
 
-// IMPORTANT: Check your pubspec.yaml file on line 1.
-// If your project is named something other than "filehive" (like "FileHive" or "myapp"),
-// replace the word "filehive" below with exactly what is in your pubspec.yaml.
-import 'package:filehive/core/theme/app_colors.dart';
-import 'package:filehive/widgets/action_card.dart';
-
-import 'create_room_screen.dart';
-import 'join_room_screen.dart';
-
 class RoomOptionsScreen extends StatelessWidget {
-  const RoomOptionsScreen({super.key});
+  const RoomOptionsScreen({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: const Color(0xFFF8F9FE),
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 25),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 30),
+              const Text(
+                "Room",
+                style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.black),
+              ),
+              const SizedBox(height: 10),
+              const Text(
+                "Create or join a room to\nshare files with multiple people.",
+                style: TextStyle(fontSize: 16, color: Colors.black54, height: 1.4),
+              ),
+              const SizedBox(height: 40),
+
+              // --- UPDATE: Create Room Card Ab Settings Screen Par Le Jayega ---
+              _buildOptionCard(
+                title: "Create Room",
+                subtitle: "Create a new room and\nshare the code",
+                icon: Icons.add,
+                bgColor: const Color(0xFFF3E8FF),
+                accentColor: const Color(0xFF8B5CF6),
+                onTap: () => Navigator.pushNamed(context, AppRoutes.room_settings), // Route Updated
+              ),
+
+              const SizedBox(height: 20),
+
+              // Join Room Card (Same as before)
+              _buildOptionCard(
+                title: "Join Room",
+                subtitle: "Join an existing room\nusing a room code",
+                icon: Icons.login_rounded,
+                bgColor: const Color(0xFFEFF6FF),
+                accentColor: const Color(0xFF3B82F6),
+                onTap: () => Navigator.pushNamed(context, AppRoutes.room_join),
+              ),
+            ],
+          ),
+        ),
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: const Color(0xFF6366F1),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), label: "Files"),
+          BottomNavigationBarItem(icon: Icon(Icons.info_outline), label: "Activity"),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Profile"),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOptionCard({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color bgColor,
+    required Color accentColor,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(25), // Ripple effect properly card ke andar rahega
+      child: Container(
+        padding: const EdgeInsets.all(25),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: Row(
           children: [
-            const CircleAvatar(
-                radius: 40,
-                backgroundColor: AppColors.primaryPurple,
-                child: Icon(Icons.groups_rounded, color: Colors.white, size: 40)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: accentColor)),
+                  const SizedBox(height: 8),
+                  Text(subtitle, style: const TextStyle(fontSize: 15, color: Colors.black54)),
+                ],
+              ),
             ),
-            const SizedBox(height: 24),
-            const Text('Room', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppColors.textDark)),
-            const SizedBox(height: 8),
-            const Text('Create or join a room to\nshare files with multiple people.', style: TextStyle(color: AppColors.textGrey)),
-            const SizedBox(height: 32),
-            ActionCard(
-              title: 'Create Room',
-              subtitle: 'Create a new room and share the code',
-              iconData: Icons.add,
-              iconColor: AppColors.primaryPurple,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateRoomScreen())),
-            ),
-            const SizedBox(height: 16),
-            ActionCard(
-              title: 'Join Room',
-              subtitle: 'Join an existing room using a room code',
-              iconData: Icons.login,
-              iconColor: AppColors.primaryBlue,
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const JoinRoomScreen())),
+            Container(
+              width: 55,
+              height: 55,
+              decoration: BoxDecoration(
+                color: accentColor,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: accentColor.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  )
+                ],
+              ),
+              child: Icon(icon, color: Colors.white, size: 30),
             ),
           ],
         ),
