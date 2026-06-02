@@ -1,7 +1,92 @@
 import 'package:flutter/material.dart';
 
-class ReceiveScreen extends StatelessWidget {
-  const ReceiveScreen({Key? key}) : super(key: key);
+import '../services/transfer/receive_service.dart';
+import '../services/network/mdns_broadcast_service.dart';
+
+class ReceiveScreen extends StatefulWidget {
+  const ReceiveScreen({super.key});
+
+  @override
+  State<ReceiveScreen> createState() => _ReceiveScreenState();
+}
+
+class _ReceiveScreenState extends State<ReceiveScreen> {
+  final ReceiveService _receiveService = ReceiveService();
+  final MdnsBroadcastService _broadcastService = MdnsBroadcastService();
+
+  bool isReceiving = false;
+  bool isLoading = false;
+
+  Future<void> _startReceiving() async {
+    try {
+      setState(() => isLoading = true);
+
+      await _receiveService.startServer(8080);
+
+      await _broadcastService.startBroadcast(
+        deviceName: "FileHive_Android",
+        port: 8080,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        isReceiving = true;
+        isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("📡 Receiver + mDNS started"),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => isLoading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Failed: $e")),
+      );
+    }
+  }
+
+  Future<void> _stopReceiving() async {
+    try {
+      setState(() => isLoading = true);
+
+      await _broadcastService.stopBroadcast();
+      await _receiveService.stopServer();
+
+      if (!mounted) return;
+
+      setState(() {
+        isReceiving = false;
+        isLoading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🛑 Receiver stopped"),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => isLoading = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("❌ Stop failed: $e")),
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _broadcastService.dispose();
+    _receiveService.stopServer();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,7 +97,7 @@ class ReceiveScreen extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
+          onPressed: isLoading ? null : () => Navigator.pop(context),
         ),
       ),
       body: Padding(
@@ -21,28 +106,34 @@ class ReceiveScreen extends StatelessWidget {
           children: [
             const SizedBox(height: 20),
 
-            // 1. Blue Circular Download Icon (As per image_2e6990.png)
             Center(
               child: Container(
                 width: 120,
                 height: 120,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF3B82F6), Color(0xFF2563EB)],
+                  gradient: LinearGradient(
+                    colors: isReceiving
+                        ? [const Color(0xFF22C55E), const Color(0xFF16A34A)]
+                        : [const Color(0xFF3B82F6), const Color(0xFF2563EB)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF3B82F6).withOpacity(0.3),
+                      color: (isReceiving
+                          ? const Color(0xFF22C55E)
+                          : const Color(0xFF3B82F6))
+                          .withOpacity(0.3),
                       blurRadius: 25,
                       offset: const Offset(0, 10),
                     ),
                   ],
                 ),
-                child: const Icon(
-                  Icons.file_download_outlined,
+                child: Icon(
+                  isReceiving
+                      ? Icons.wifi_tethering
+                      : Icons.file_download_outlined,
                   size: 60,
                   color: Colors.white,
                 ),
@@ -51,39 +142,50 @@ class ReceiveScreen extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // 2. Title and Subtitle
-            const Text(
-              "Receive Files",
-              style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            Text(
+              isReceiving ? "Waiting for Sender" : "Receive Files",
+              style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
             ),
+
             const SizedBox(height: 10),
-            const Text(
-              "Your device is ready to receive\nfiles from nearby devices.",
+
+            Text(
+              isReceiving
+                  ? "Your device is visible now.\nSender can discover this device."
+                  : "Tap start to make this device ready\nfor receiving files.",
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.black54, fontSize: 16),
+              style: const TextStyle(color: Colors.black54, fontSize: 16),
             ),
 
             const SizedBox(height: 40),
 
-            // 3. Start Receiving Button
             SizedBox(
               width: double.infinity,
               height: 65,
               child: ElevatedButton(
-                onPressed: () {
-                  // Scanning animation screen par bhejne ke liye
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                  if (isReceiving) {
+                    await _stopReceiving();
+                  } else {
+                    await _startReceiving();
+                  }
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF3B82F6),
+                  backgroundColor: isReceiving
+                      ? const Color(0xFFEF4444)
+                      : const Color(0xFF3B82F6),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
                   ),
                   elevation: 5,
-                  shadowColor: const Color(0xFF3B82F6).withOpacity(0.4),
                 ),
-                child: const Text(
-                  "Start Receiving",
-                  style: TextStyle(
+                child: isLoading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                  isReceiving ? "Stop Receiving" : "Start Receiving",
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -94,7 +196,6 @@ class ReceiveScreen extends StatelessWidget {
 
             const SizedBox(height: 40),
 
-            // 4. Device Name Card
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -114,21 +215,35 @@ class ReceiveScreen extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Device Name",
-                          style: TextStyle(color: Colors.grey, fontSize: 14)),
+                      const Text(
+                        "Device Status",
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
                       const SizedBox(height: 5),
-                      Text("FileHive_Android",
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey[900])),
+                      Text(
+                        isReceiving ? "Receiver Active" : "Receiver Inactive",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: isReceiving
+                              ? Colors.green[700]
+                              : Colors.blueGrey[900],
+                        ),
+                      ),
                     ],
                   ),
-                  const Icon(Icons.edit_outlined, color: Colors.black54),
+                  Icon(
+                    isReceiving
+                        ? Icons.check_circle_outline
+                        : Icons.power_settings_new,
+                    color: isReceiving ? Colors.green : Colors.black54,
+                  ),
                 ],
               ),
             ),
 
             const SizedBox(height: 30),
 
-            // 5. Bottom Info Box (Security/Note)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -141,7 +256,7 @@ class ReceiveScreen extends StatelessWidget {
                   SizedBox(width: 15),
                   Expanded(
                     child: Text(
-                      "Make sure the sender is nearby and connected.",
+                      "Make sure sender and receiver are connected to the same Wi-Fi or hotspot.",
                       style: TextStyle(color: Color(0xFF1E40AF), fontSize: 14),
                     ),
                   ),
