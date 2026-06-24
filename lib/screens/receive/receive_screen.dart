@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../services/transfer/receive_service.dart';
-import '../services/network/mdns_broadcast_service.dart';
+import '../../services/transfer/receive_service.dart';
+import '../../services/network/mdns_broadcast_service.dart';
 
 class ReceiveScreen extends StatefulWidget {
   const ReceiveScreen({super.key});

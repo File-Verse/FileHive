@@ -7,19 +7,19 @@ import 'package:filehive/screens/home/home_screen.dart';
 import 'package:filehive/screens/files_screen.dart';
 import 'package:filehive/screens/file_selection_screen.dart';
 import 'package:filehive/screens/scanning_screen.dart';
-import 'package:filehive/screens/receive_screen.dart';
+import 'package:filehive/screens/receive/receive_screen.dart';
 import 'package:filehive/screens/send_progress_screen.dart';
 
 // --- FOLDER SPECIFIC IMPORTS ---
 import 'package:filehive/screens/send_screen.dart';
-import 'package:filehive/send/device_found_screen.dart';
-import 'package:filehive/transfer/transfer_complete_screen.dart';
+import 'package:filehive/screens/send/device_found_screen.dart';
+import 'package:filehive/screens/transfer/transfer_complete_screen.dart';
 
 // --- ROOM IMPORTS ---
-import 'package:filehive/room/room_options_screen.dart';
-import 'package:filehive/room/create_room_settings_screen.dart'; // Naya Settings Screen Import
-import 'package:filehive/room/create_room_screen.dart';
-import 'package:filehive/room/join_room_screen.dart';
+import 'package:filehive/screens/room/room_options_screen.dart';
+import 'package:filehive/screens/room/create_room_settings_screen.dart'; // Naya Settings Screen Import
+import 'package:filehive/screens/room/create_room_screen.dart';
+import 'package:filehive/screens/room/join_room_screen.dart';
 
 class AppRoutes {
   // --- ROUTE CONSTANTS ---
