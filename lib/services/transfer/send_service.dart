@@ -43,41 +43,58 @@ class SendService {
 
       debugPrint('📡 Found receiver: ${device.ip}:${device.port}');
 
-      final file = await pickFile();
+      // Pick multiple files
+      final List<File> files = await pickFiles();
 
-      if (file == null) {
+      if (files.isEmpty) {
         onError('No file selected');
         return;
       }
 
-      await uploadToReceiver(
-        file: file,
-        receiverIP: device.ip,
-        port: device.port,
-        token: token,
-        onProgress: onProgress,
-        onError: onError,
-      );
+      // Upload every selected file
+      for (int i = 0; i < files.length; i++) {
+        final success = await uploadToReceiver(
+          file: files[i],
+          receiverIP: device.ip,
+          port: device.port,
+          token: token,
+          onProgress: (progress) {
+            // Overall progress
+            onProgress((i + progress) / files.length);
+          },
+          onError: onError,
+        );
+
+        if (!success) {
+          onError('❌ Failed to upload ${p.basename(files[i].path)}');
+          return;
+        }
+      }
+
+      debugPrint('✅ All files sent successfully');
     } catch (e) {
       onError('❌ pickAndSend error: $e');
     }
   }
 
-  Future<File?> pickFile() async {
+  Future<List<File>> pickFiles() async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        allowMultiple: false,
+        allowMultiple: true,
         type: FileType.any,
       );
 
-      if (result == null || result.files.single.path == null) {
-        return null;
+      if (result == null) {
+        return [];
       }
 
-      return File(result.files.single.path!);
+      return result.files
+          .where((file) => file.path != null)
+          .map((file) => File(file.path!))
+          .toList();
     } catch (e) {
-      debugPrint('❌ pickFile error: $e');
-      return null;
+      debugPrint('❌ pickFiles error: $e');
+      return [];
     }
   }
 

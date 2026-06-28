@@ -5,13 +5,12 @@ import 'package:filehive/screens/splash_screen.dart';
 import 'package:filehive/screens/onboarding_wrapper.dart';
 import 'package:filehive/screens/home/home_screen.dart';
 import 'package:filehive/screens/files_screen.dart';
-import 'package:filehive/screens/file_selection_screen.dart';
 import 'package:filehive/screens/scanning_screen.dart';
 import 'package:filehive/screens/receive/receive_screen.dart';
 import 'package:filehive/screens/send_progress_screen.dart';
 
 // --- FOLDER SPECIFIC IMPORTS ---
-import 'package:filehive/screens/send_screen.dart';
+import 'package:filehive/screens/send/send_screen.dart';
 import 'package:filehive/screens/send/device_found_screen.dart';
 import 'package:filehive/screens/transfer/transfer_complete_screen.dart';
 
@@ -49,7 +48,6 @@ class AppRoutes {
       home: (context) => const HomeScreen(),
       files: (context) => const FilesScreen(),
       send: (context) => const SendScreen(),
-      selection: (context) => const FileSelectionScreen(),
       scanning: (context) => const ScanningScreen(),
       receive: (context) => const ReceiveScreen(),
       deviceFound: (context) => const DeviceFoundScreen(),
